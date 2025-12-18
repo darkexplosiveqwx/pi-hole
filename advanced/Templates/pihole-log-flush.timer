@@ -1,0 +1,14 @@
+# Pi-hole: Flush the log daily at 00:00
+#          The flush script will use logrotate if available
+#          parameter "once": logrotate only once (default is twice)
+#          parameter "quiet": don't print messages
+[Unit]
+Description=Daily Pi-hole log flush
+
+[Timer]
+OnCalendar=*-*-* 00:00:00
+# pihole-logrotate.service will handle logrotate on boot
+Persistent=false
+
+[Install]
+WantedBy=timers.target

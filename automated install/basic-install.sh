@@ -116,11 +116,11 @@ c=70
 PIHOLE_META_PACKAGE_CONTROL_APT=$(
     cat <<EOM
 Package: pihole-meta
-Version: 0.6
+Version: 0.7
 Maintainer: Pi-hole team <adblock@pi-hole.net>
 Architecture: all
 Description: Pi-hole dependency meta package
-Depends: awk,bash-completion,binutils,ca-certificates,cron|cron-daemon,curl,dialog,bind9-dnsutils|dnsutils,dns-root-data,git,grep,iproute2,iputils-ping,jq,libcap2,libcap2-bin,lshw,procps,psmisc,sudo,unzip
+Depends: awk,bash-completion,binutils,ca-certificates,cron|cron-daemon|systemd,curl,dialog,bind9-dnsutils|dnsutils,dns-root-data,git,grep,iproute2,iputils-ping,jq,libcap2,libcap2-bin,lshw,procps,psmisc,sudo,unzip
 Section: contrib/metapackages
 Priority: optional
 EOM
@@ -130,12 +130,12 @@ EOM
 PIHOLE_META_PACKAGE_CONTROL_RPM=$(
     cat <<EOM
 Name: pihole-meta
-Version: 0.3
+Version: 0.4
 Release: 1
 License: EUPL
 BuildArch: noarch
 Summary: Pi-hole dependency meta package
-Requires: bash-completion,bind-utils,binutils,ca-certificates,chkconfig,cronie,curl,dialog,findutils,gawk,git,grep,iproute,jq,libcap,lshw,procps-ng,psmisc,sudo,unzip
+Requires: bash-completion,bind-utils,binutils,ca-certificates,chkconfig,curl,dialog,findutils,gawk,git,grep,iproute,jq,libcap,lshw,procps-ng,psmisc,sudo,unzip
 %description
 Pi-hole dependency meta package
 %prep
@@ -143,6 +143,9 @@ Pi-hole dependency meta package
 %files
 %install
 %changelog
+* Thu Dec 18 2025 Pi-hole Team - 0.4
+- Remove cronie from the list of dependencies to use systemd .timers instead
+
 * Mon Jul 14 2025 Pi-hole Team - 0.3
 - Remove nmap-ncat from the list of dependencies
 
@@ -1219,6 +1222,20 @@ installConfigs() {
             update-rc.d pihole-FTL remove
         fi
 
+        # Install cron-equivalent systemd timers
+        install -T -m 0644 "${PI_HOLE_LOCAL_REPO}/advanced/Templates/pihole-log-flush.systemd" '/etc/systemd/system/pihole-log-flush.service'
+        install -T -m 0644 "${PI_HOLE_LOCAL_REPO}/advanced/Templates/pihole-log-flush.timer" '/etc/systemd/system/pihole-log-flush.timer'
+        install -T -m 0644 "${PI_HOLE_LOCAL_REPO}/advanced/Templates/pihole-update-gravity.systemd" '/etc/systemd/system/pihole-update-gravity.service'
+        install -T -m 0644 "${PI_HOLE_LOCAL_REPO}/advanced/Templates/pihole-update-gravity.timer" '/etc/systemd/system/pihole-update-gravity.timer'
+        install -T -m 0644 "${PI_HOLE_LOCAL_REPO}/advanced/Templates/pihole-updatechecker.systemd" '/etc/systemd/system/pihole-updatechecker.service'
+        install -T -m 0644 "${PI_HOLE_LOCAL_REPO}/advanced/Templates/pihole-updatechecker.timer" '/etc/systemd/system/pihole-updatechecker.timer'
+        install -T -m 0644 "${PI_HOLE_LOCAL_REPO}/advanced/Templates/pihole-logrotate.systemd" '/etc/systemd/system/pihole-logrotate.service'
+
+        # Remove old cronjob if present
+        if [[ -e '/etc/cron.d/pihole' ]]; then
+            rm '/etc/cron.d/pihole'
+        fi
+
         # Load final service
         systemctl daemon-reload
     else
@@ -1660,8 +1677,10 @@ installPihole() {
         exit 1
     fi
 
-    # Install the cron file
-    installCron
+    # Install the cron file only when not using systemd.timer
+    if ! is_command systemctl; then
+        installCron
+    fi
 
     # Install the logrotate file
     installLogrotate || true
@@ -2427,6 +2446,13 @@ main() {
     enable_service pihole-FTL
 
     restart_service pihole-FTL
+
+    if is_command systemctl; then
+        enable_service pihole-log-flush.timer
+        enable_service pihole-logrotate.service
+        enable_service pihole-update-gravity.timer
+        enable_service pihole-updatechecker.timer
+    fi
 
     if [[ "${fresh_install}" == true ]]; then
         # apply settings to pihole.toml

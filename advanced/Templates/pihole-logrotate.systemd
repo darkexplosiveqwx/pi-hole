@@ -1,0 +1,11 @@
+[Unit]
+Description=Pi-hole logrotate
+After=local-fs.target
+Requires=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/logrotate --state /var/lib/logrotate/pihole /etc/pihole/logrotate
+
+[Install]
+WantedBy=multi-user.target
