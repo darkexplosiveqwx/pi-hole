@@ -9,6 +9,7 @@ Description=Daily Pi-hole log flush
 OnCalendar=*-*-* 00:00:00
 # pihole-logrotate.service will handle logrotate on boot
 Persistent=false
+OnBootSec=1
 
 [Install]
 WantedBy=timers.target
