@@ -7,3 +7,12 @@ After=network-online.target nss-lookup.target
 Type=oneshot
 User=root
 ExecStart=/usr/bin/bash -c 'PATH="$PATH:/usr/sbin:/usr/local/bin/" pihole updatechecker'
+
+ProtectSystem=full
+ReadWriteDirectories=/etc/pihole
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+RestrictSUIDSGID=yes
+UMask=0077
+LockPersonality=yes

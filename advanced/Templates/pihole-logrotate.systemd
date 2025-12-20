@@ -7,5 +7,14 @@ Requires=local-fs.target
 Type=oneshot
 ExecStart=/usr/sbin/logrotate --state /var/lib/logrotate/pihole /etc/pihole/logrotate
 
+ProtectSystem=full
+ReadWriteDirectories=/etc/pihole
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+RestrictSUIDSGID=yes
+UMask=0077
+LockPersonality=yes
+
 [Install]
 WantedBy=multi-user.target

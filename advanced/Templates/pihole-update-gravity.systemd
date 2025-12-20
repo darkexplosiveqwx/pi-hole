@@ -9,3 +9,16 @@ After=network-online.target nss-lookup.target
 Type=oneshot
 User=pihole
 ExecStart=/usr/bin/bash -c 'PATH="$PATH:/usr/sbin:/usr/local/bin/" pihole updateGravity | tee /var/log/pihole/pihole_updateGravity.log'
+
+# Make /usr, /boot, /etc and possibly some more folders read-only...
+ProtectSystem=full
+# ... except /etc/pihole
+# This merely retains r/w access rights, it does not add any new.
+# Must still be writable on the host!
+ReadWriteDirectories=/etc/pihole
+ProtectHome=read-only
+PrivateTmp=yes
+NoNewPrivileges=yes
+RestrictSUIDSGID=yes
+UMask=0077
+LockPersonality=yes
