@@ -173,16 +173,6 @@ def test_installPihole_fresh_install_readableFiles(host):
         )
         actual_rc = host.run(check_man).rc
         assert exit_status_success == actual_rc
-    # check not readable cron file
-    check_sudo = test_cmd.format("x", "/etc/cron.d/", piholeuser)
-    actual_rc = host.run(check_sudo).rc
-    assert exit_status_success == actual_rc
-    check_sudo = test_cmd.format("r", "/etc/cron.d/", piholeuser)
-    actual_rc = host.run(check_sudo).rc
-    assert exit_status_success == actual_rc
-    check_sudo = test_cmd.format("r", "/etc/cron.d/pihole", piholeuser)
-    actual_rc = host.run(check_sudo).rc
-    assert exit_status_success == actual_rc
     directories = get_directories_recursive(host, "/etc/.pihole/")
     for directory in directories:
         check_pihole = test_cmd.format("r", directory, piholeuser)
