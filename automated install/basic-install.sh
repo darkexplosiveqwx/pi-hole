@@ -264,6 +264,15 @@ is_command() {
     command -v "${check_command}" >/dev/null 2>&1
 }
 
+is_pid1() {
+    # Checks to see if the given command runs as PID 1
+    local is_pid1="$1"
+
+    # select PID 1, format output to show only CMD column without header
+    # quietly grep for a match on the function passed parameter
+    ps --pid 1 --format comm= | grep -q "${is_pid1}"
+}
+
 check_fresh_install() {
     # in case of an update (can be a v5 -> v6 or v6 -> v6 update) or repair
     if [[ -f "${PI_HOLE_V6_CONFIG}" ]] || [[ -f "/etc/pihole/setupVars.conf" ]]; then
@@ -1213,7 +1222,7 @@ installConfigs() {
     fi
 
     # Install pihole-FTL systemd or init.d service, based on whether systemd is the init system or not
-    if ps -p 1 -o comm= | grep -q systemd; then
+    if is_pid1 systemd; then
         install -T -m 0644 "${PI_HOLE_LOCAL_REPO}/advanced/Templates/pihole-FTL.systemd" '/etc/systemd/system/pihole-FTL.service'
 
         # Remove init.d service if present
@@ -1678,7 +1687,7 @@ installPihole() {
     fi
 
     # Install the cron file only when not using systemd.timer
-    if ! is_command systemctl; then
+    if is_pid1 systemd; then
         installCron
     fi
 
@@ -2447,7 +2456,7 @@ main() {
 
     restart_service pihole-FTL
 
-    if is_command systemctl; then
+    if is_pid1 systemd; then
         enable_service pihole-log-flush.timer
         enable_service pihole-logrotate.service
         enable_service pihole-update-gravity.timer
