@@ -112,11 +112,15 @@ fi
 r=20
 c=70
 
+# Version of Pi-hole's meta package on APT based systems
+# Must be incremented whenever dependencies in PIHOLE_META_PACKAGE_CONTROL_APT change
+PIHOLE_META_VERSION_APT=0.8
+
 # Content of Pi-hole's meta package control file on APT based systems
 PIHOLE_META_PACKAGE_CONTROL_APT=$(
     cat <<EOM
 Package: pihole-meta
-Version: 0.7
+Version: ${PIHOLE_META_VERSION_APT}
 Maintainer: Pi-hole team <adblock@pi-hole.net>
 Architecture: all
 Description: Pi-hole dependency meta package
@@ -130,7 +134,7 @@ EOM
 PIHOLE_META_PACKAGE_CONTROL_RPM=$(
     cat <<EOM
 Name: pihole-meta
-Version: 0.4
+Version: 0.5
 Release: 1
 License: EUPL
 BuildArch: noarch
@@ -143,8 +147,10 @@ Pi-hole dependency meta package
 %files
 %install
 %changelog
-* Thu Dec 18 2025 Pi-hole Team - 0.4
+* Mon Apr 20 2026 Pi-hole Team - 0.5
 - Remove cronie from the list of dependencies to use systemd .timers instead
+
+* Thu Dec 18 2025 Pi-hole Team - 0.4
 - Add logrotate to the list of dependencies
 
 * Mon Jul 14 2025 Pi-hole Team - 0.3
@@ -293,8 +299,6 @@ package_manager_detect() {
         UPDATE_PKG_CACHE="${PKG_MANAGER} update"
         # The command we will use to actually install packages
         PKG_INSTALL="${PKG_MANAGER} -qq --no-install-recommends install"
-        # grep -c will return 1 if there are no matches. This is an acceptable condition, so we OR TRUE to prevent set -e exiting the script.
-        PKG_COUNT="${PKG_MANAGER} -s -o Debug::NoLocking=true upgrade | grep -c ^Inst || true"
         # The command we will use to remove packages (used in the uninstaller)
         PKG_REMOVE="${PKG_MANAGER} -y remove --purge"
 
@@ -309,8 +313,6 @@ package_manager_detect() {
 
         # These variable names match the ones for apt-get. See above for an explanation of what they are for.
         PKG_INSTALL="${PKG_MANAGER} install -y"
-        # CentOS package manager returns 100 when there are packages to update so we need to || true to prevent the script from exiting.
-        PKG_COUNT="${PKG_MANAGER} check-update | grep -E '(.i686|.x86|.noarch|.arm|.src|.riscv64)' | wc -l || true"
         # The command we will use to remove packages (used in the uninstaller)
         PKG_REMOVE="${PKG_MANAGER} remove -y"
 
@@ -319,7 +321,6 @@ package_manager_detect() {
         PKG_MANAGER="apk"
         UPDATE_PKG_CACHE="${PKG_MANAGER} update"
         PKG_INSTALL="${PKG_MANAGER} add"
-        PKG_COUNT="${PKG_MANAGER} list --upgradable -q | wc -l"
         PKG_REMOVE="${PKG_MANAGER} del"
 
     else
@@ -1277,10 +1278,6 @@ install_manpage() {
         # if not present, create man8 directory
         install -d -m 755 /usr/local/share/man/man8
     fi
-    if [[ ! -d "/usr/local/share/man/man5" ]]; then
-        # if not present, create man5 directory
-        install -d -m 755 /usr/local/share/man/man5
-    fi
     # Testing complete, copy the files & update the man db
     install -D -m 644 -T ${PI_HOLE_LOCAL_REPO}/manpages/pihole.8 /usr/local/share/man/man8/pihole.8
 
@@ -1403,8 +1400,8 @@ EOF
 }
 
 update_package_cache() {
-    # Update package cache on apt based OSes. Do this every time since
-    # it's quick and packages can be updated at any time.
+    # Update package cache on apt based OSes. Only called when pihole-meta is
+    # absent or outdated, so new dependencies can be resolved by apt.
 
     # Local, named variables
     local str="Update local cache of available packages"
@@ -1423,23 +1420,6 @@ update_package_cache() {
         printf "%b  %b %s\\n" "${OVER}" "${CROSS}" "${str}"
         printf "  %b Error: Unable to update package cache. Please try \"%s\"%b\\n" "${COL_RED}" "sudo ${UPDATE_PKG_CACHE}" "${COL_NC}"
         return 1
-    fi
-}
-
-# Let user know if they have outdated packages on their system and
-# advise them to run a package update at soonest possible.
-notify_package_updates_available() {
-    # Local, named variables
-    local str="Checking ${PKG_MANAGER} for upgraded packages"
-    printf "\\n  %b %s..." "${INFO}" "${str}"
-    # Store the list of packages in a variable
-    updatesToInstall=$(eval "${PKG_COUNT}")
-
-    if [[ "${updatesToInstall}" -eq 0 ]]; then
-        printf "%b  %b %s... up to date!\\n\\n" "${OVER}" "${TICK}" "${str}"
-    else
-        printf "%b  %b %s... %s updates available\\n" "${OVER}" "${TICK}" "${str}" "${updatesToInstall}"
-        printf "  %b %bIt is recommended to update your OS after installing the Pi-hole!%b\\n\\n" "${INFO}" "${COL_GREEN}" "${COL_NC}"
     fi
 }
 
@@ -1835,6 +1815,12 @@ clone_or_reset_repos() {
     # If the user wants to repair/update,
     if [[ "${repair}" == true ]]; then
         printf "  %b Resetting local repos\\n" "${INFO}"
+
+        # import getFTLConfigValue from utils.sh
+        source "/opt/pihole/utils.sh"
+        # Use the configured Web repo location on repair/update
+        webInterfaceDir=$(getFTLConfigValue "webserver.paths.webroot")$(getFTLConfigValue "webserver.paths.webhome")
+
         # Reset the Core repo
         resetRepo ${PI_HOLE_LOCAL_REPO} ||
             {
@@ -2068,8 +2054,8 @@ FTLcheckUpdate() {
 
         # Check whether or not the binary for this FTL branch actually exists. If not, then there is no update!
         local status
-        if ! check_download_exists "${path}"; then
-            status=$?
+        check_download_exists "${path}" && status=0 || status=$?
+        if [ "${status}" -ne 0 ]; then
             if [ "${status}" -eq 1 ]; then
                 printf "  %b Branch \"%s\" is not available.\\n" "${INFO}" "${ftlBranch}"
                 printf "  %b Use %bpihole checkout ftl [branchname]%b to switch to a valid branch.\\n" "${INFO}" "${COL_GREEN}" "${COL_NC}"
@@ -2331,13 +2317,18 @@ main() {
     # Check for supported package managers so that we may install dependencies
     package_manager_detect
 
-    # Update package cache only on apt based systems
+    # Only update the apt package cache when pihole-meta is absent or outdated.
+    # On a fresh install the package won't exist yet so the cache update always
+    # runs. On upgrades it only runs when the meta version has bumped, meaning
+    # new dependencies may have been added. This saves time and I/O on
+    # resource-constrained hardware (e.g. SD cards).
     if is_command apt-get; then
+        local installed_meta_version
+        installed_meta_version=$(dpkg-query -W -f='${Version}' pihole-meta 2>/dev/null) || true
+        if dpkg --compare-versions "${installed_meta_version}" lt "${PIHOLE_META_VERSION_APT}"; then
             update_package_cache || exit 1
+        fi
     fi
-
-    # Notify user of package availability
-    notify_package_updates_available
 
     # Build dependency package
     build_dependency_package

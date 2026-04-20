@@ -71,8 +71,10 @@ fix_owner_permissions() {
   chown pihole:pihole "${1}"
   chmod 664 "${1}"
 
-  # Ensure the containing directory is group writable
-  chmod g+w "$(dirname -- "${1}")"
+  # Ensure the containing directory is owned by pihole:pihole
+  # so the pihole user can write to it without requiring group-write
+  # permissions (which would change the directory mode unexpectedly)
+  chown pihole:pihole "$(dirname -- "${1}")"
 }
 
 # Generate new SQLite3 file from schema template
@@ -86,16 +88,17 @@ generate_gravity_database() {
 
 # Build gravity tree
 gravity_build_tree() {
+  local table="$1"
   local str
-  str="Building tree"
+  str="Building ${table} tree"
   echo -ne "  ${INFO} ${str}..."
 
   # The index is intentionally not UNIQUE as poor quality adlists may contain domains more than once
-  output=$({ pihole-FTL sqlite3 -ni "${gravityTEMPfile}" "CREATE INDEX idx_gravity ON gravity (domain, adlist_id);"; } 2>&1)
+  output=$({ pihole-FTL sqlite3 -ni "${gravityTEMPfile}" "CREATE INDEX idx_${table} ON ${table} (domain, adlist_id);"; } 2>&1)
   status="$?"
 
   if [[ "${status}" -ne 0 ]]; then
-    echo -e "\\n  ${CROSS} Unable to build gravity tree in ${gravityTEMPfile}\\n  ${output}"
+    echo -e "\\n  ${CROSS} Unable to build ${table} tree in ${gravityTEMPfile}\\n  ${output}"
     echo -e "  ${INFO} If you have a large amount of domains, make sure your Pi-hole has enough RAM available\\n"
     return 1
   fi
@@ -612,7 +615,7 @@ compareLists() {
 gravity_DownloadBlocklistFromUrl() {
   local url="${1}" adlistID="${2}" saveLocation="${3}" compression="${4}" gravity_type="${5}" domain="${6}"
   local listCurlBuffer str httpCode success="" ip customUpstreamResolver=""
-  local file_path permissions ip_addr port blocked=false download=true
+  local file_path ip_addr port blocked=false download=true
   # modifiedOptions is an array to store all the options used to check if the adlist has been changed upstream
   local modifiedOptions=()
 
@@ -721,29 +724,40 @@ gravity_DownloadBlocklistFromUrl() {
     fi
   fi
 
-  # If we are going to "download" a local file, we first check if the target
-  # file has a+r permission. We explicitly check for all+read because we want
-  # to make sure that the file is readable by everyone and not just the user
-  # running the script.
-  if [[ $url == "file://"* ]]; then
+  # If we "download" a local file (file://), verify read access before using it.
+  # When running as root (e.g., via pihole -g), check that the 'pihole' user can read the file
+  # to match the effective runtime user of FTL; otherwise, check the current user's read access
+  # (e.g., in Docker or when invoked by a non-root user). The target must
+  # resolve to a regular file and be readable by the evaluated user.
+  if [[ "${url}" == "file:/"* ]]; then
     # Get the file path
-    file_path=$(echo "$url" | cut -d'/' -f3-)
+    file_path=$(echo "${url}" | cut -d'/' -f3-)
     # Check if the file exists and is a regular file (i.e. not a socket, fifo, tty, block). Might still be a symlink.
-    if [[ ! -f $file_path ]]; then
-      # Output that the file does not exist
-      echo -e "${OVER}  ${CROSS} ${file_path} does not exist"
-      download=false
-    else
-      # Check if the file or a file referenced by the symlink has a+r permissions
-      permissions=$(stat -L -c "%a" "$file_path")
-      if [[ $permissions == *4 || $permissions == *5 || $permissions == *6 || $permissions == *7 ]]; then
-        # Output that we are using the local file
-        echo -e "${OVER}  ${INFO} Using local file ${file_path}"
-      else
-        # Output that the file does not have the correct permissions
-        echo -e "${OVER}  ${CROSS} Cannot read file (file needs to have a+r permission)"
+    if [[ ! -f ${file_path} ]]; then
+        # Output that the file does not exist
+        echo -e "${OVER}  ${CROSS} ${file_path} does not exist"
         download=false
-      fi
+    else
+        if [ "$(id -un)" == "root" ]; then
+            # If we are root, we need to check if the pihole user has read permission
+            #  otherwise, we might read files that the pihole user should not be able to read
+            if sudo -u pihole test -r "${file_path}"; then
+                echo -e "${OVER}  ${INFO} Using local file ${file_path}"
+            else
+                echo -e "${OVER}  ${CROSS} Cannot read file (user 'pihole' lacks read permission)"
+                download=false
+            fi
+        else
+            # If we are not root, we just check if the current user has read permission
+            if [[ -r "${file_path}" ]]; then
+                # Output that we are using the local file
+                echo -e "${OVER}  ${INFO} Using local file ${file_path}"
+            else
+                # Output that the file is not readable by the current user
+                echo -e "${OVER}  ${CROSS} Cannot read file (current user '$(id -un)' lacks read permission)"
+                download=false
+            fi
+        fi
     fi
   fi
 
@@ -811,6 +825,10 @@ gravity_DownloadBlocklistFromUrl() {
       fix_owner_permissions "${saveLocation}"
       # Compare lists if they are identical
       compareLists "${adlistID}" "${saveLocation}"
+      # Set permissions for the *.etag file
+      if [[ -f "${saveLocation}.etag" ]]; then
+          fix_owner_permissions "${saveLocation}.etag"
+      fi
       # Add domains to database table file
       pihole-FTL "${gravity_type}" parseList "${saveLocation}" "${gravityTEMPfile}" "${adlistID}"
       done="true"
@@ -844,11 +862,11 @@ gravity_Table_Count() {
   local str="${2}"
   local num
   num="$(pihole-FTL sqlite3 -ni "${gravityTEMPfile}" "SELECT COUNT(*) FROM ${table};")"
-  if [[ "${table}" == "gravity" ]]; then
+  if [[ "${table}" == "gravity" || "${table}" == "antigravity" ]]; then
     local unique
     unique="$(pihole-FTL sqlite3 -ni "${gravityTEMPfile}" "SELECT COUNT(*) FROM (SELECT DISTINCT domain FROM ${table});")"
     echo -e "  ${INFO} Number of ${str}: ${num} (${COL_BOLD}${unique} unique domains${COL_NC})"
-    pihole-FTL sqlite3 -ni "${gravityTEMPfile}" "INSERT OR REPLACE INTO info (property,value) VALUES ('gravity_count',${unique});"
+    pihole-FTL sqlite3 -ni "${gravityTEMPfile}" "INSERT OR REPLACE INTO info (property,value) VALUES ('${table}_count',${unique});"
   else
     echo -e "  ${INFO} Number of ${str}: ${num}"
   fi
@@ -858,11 +876,14 @@ gravity_Table_Count() {
 gravity_ShowCount() {
   # Here we use the table "gravity" instead of the view "vw_gravity" for speed.
   # It's safe to replace it here, because right after a gravity run both will show the exactly same number of domains.
+  echo ""
   gravity_Table_Count "gravity" "gravity domains"
+  gravity_Table_Count "antigravity" "antigravity domains"
   gravity_Table_Count "domainlist WHERE type = 1 AND enabled = 1" "exact denied domains"
   gravity_Table_Count "domainlist WHERE type = 3 AND enabled = 1" "regex denied filters"
   gravity_Table_Count "domainlist WHERE type = 0 AND enabled = 1" "exact allowed domains"
   gravity_Table_Count "domainlist WHERE type = 2 AND enabled = 1" "regex allowed filters"
+  echo ""
 }
 
 # Trap Ctrl-C
@@ -947,7 +968,7 @@ database_recovery() {
   else
     echo -e "${OVER}  ${CROSS} ${str} - the following errors happened:"
     while IFS= read -r line; do echo "  - $line"; done <<<"$result"
-    echo -e "  ${CROSS} Recovery failed. Try \"pihole -r recreate\" instead."
+    echo -e "  ${CROSS} Recovery failed. Try \"pihole -g -r recreate\" instead."
     exit 1
   fi
   echo ""
@@ -1149,7 +1170,8 @@ update_gravity_timestamp
 fix_owner_permissions "${gravityTEMPfile}"
 
 # Build the tree
-timeit gravity_build_tree
+timeit gravity_build_tree gravity
+timeit gravity_build_tree antigravity
 
 # Compute numbers to be displayed (do this after building the tree to get the
 # numbers quickly from the tree instead of having to scan the whole database)
