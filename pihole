@@ -156,11 +156,8 @@ versionFunc() {
 }
 
 reloadDNS() {
-  local svcOption svc str output status pid icon FTL_PID_FILE sigrtmin
+  local svcOption svc str output status pid icon sigrtmin
   svcOption="${1:-reload}"
-
-  # get the current path to the pihole-FTL.pid
-  FTL_PID_FILE="$(getFTLConfigValue files.pid)"
 
   # Determine if we should reload or restart
   if [[ "${svcOption}" =~ "reload-lists" ]]; then
@@ -169,7 +166,7 @@ reloadDNS() {
     # Note 2: We cannot use killall here as it does
     #         not know about real-time signals
 
-    pid="$(getFTLPID ${FTL_PID_FILE})"
+    pid="$(getFTLPID)"
     if [[ "$pid" -eq "-1" ]]; then
       svc="true"
       str="FTL is not running"
@@ -185,7 +182,7 @@ reloadDNS() {
   elif [[ "${svcOption}" =~ "reload" ]]; then
     # Reloading of the DNS cache has been requested
     # Note: This will NOT re-read any *.conf files
-    pid="$(getFTLPID ${FTL_PID_FILE})"
+    pid="$(getFTLPID)"
     if [[ "$pid" -eq "-1" ]]; then
       svc="true"
       str="FTL is not running"
@@ -343,11 +340,9 @@ analyze_ports() {
 
 statusFunc() {
     # Determine if there is pihole-FTL service is listening
-    local pid port ftl_pid_file block_status
+    local pid port block_status
 
-    ftl_pid_file="$(getFTLConfigValue files.pid)"
-
-    pid="$(getFTLPID ${ftl_pid_file})"
+    pid="$(getFTLPID)"
 
     if [[ "$pid" -eq "-1" ]]; then
         case "${1}" in

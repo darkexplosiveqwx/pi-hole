@@ -1,16 +1,5 @@
 #!/usr/bin/env sh
 
-# Source utils.sh for getFTLConfigValue()
-PI_HOLE_SCRIPT_DIR='/opt/pihole'
-utilsfile="${PI_HOLE_SCRIPT_DIR}/utils.sh"
-# shellcheck source="./advanced/Scripts/utils.sh"
-. "${utilsfile}"
-
-# Get file paths
-FTL_PID_FILE="$(getFTLConfigValue files.pid)"
-FTL_PID_FILE="${FTL_PID_FILE:-/run/pihole-FTL.pid}"
-
-
 # Ensure that permissions are set so that pihole-FTL can edit all necessary files
 mkdir -p /var/log/pihole
 chown -R pihole:pihole /etc/pihole/ /var/log/pihole/
@@ -30,5 +19,6 @@ find /etc/pihole/ -type f \( -name '*.pem' -o -name '*.crt' \) -exec chmod 0600 
 chown root:root /etc/pihole/logrotate
 
 # Touch files to ensure they exist (create if non-existing, preserve if existing)
-[ -f "${FTL_PID_FILE}" ] || install -D -m 644 -o pihole -g pihole /dev/null "${FTL_PID_FILE}"
+# Hardcoded PID path — see GHSA-6w8x-p785-6pm4
+[ -f /run/pihole-FTL.pid ] || install -D -m 644 -o pihole -g pihole /dev/null /run/pihole-FTL.pid
 [ -f /etc/pihole/dhcp.leases ] || install -m 644 -o pihole -g pihole /dev/null /etc/pihole/dhcp.leases
