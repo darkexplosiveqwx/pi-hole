@@ -98,6 +98,7 @@ SUITE_1=(
     test_installer_ftl.bats
     test_network.bats
     test_utils.bats
+    test_gravity.bats
 )
 [[ "${DISTRO_FAMILY}" == "rhel" ]] && SUITE_1+=(test_selinux.bats)
 
@@ -135,6 +136,19 @@ docker buildx build \
     ../
 
 # ---------------------------------------------------------------------------
+# Configure BATS output
+# ---------------------------------------------------------------------------
+
+BATS_FLAGS=();
+
+# Use pretty output when stdout is a terminal; TAP format for CI
+if [[ -t 1 ]]; then
+    BATS_FLAGS+=("--formatter" "pretty")
+else
+    BATS_FLAGS+=("--formatter" "tap")
+fi
+
+# ---------------------------------------------------------------------------
 # run_suite <label> <file>...
 #   Spin up a fresh container and run the named BATS files inside it.
 # ---------------------------------------------------------------------------
@@ -148,8 +162,8 @@ run_suite() {
     docker run --rm -t "${IMAGE_TAG}" \
         bash -euo pipefail -c '
             cd /etc/.pihole/test
-            exec libs/bats/bin/bats -p --print-output-on-failure "$@"
-        ' bash "${files[@]}"
+            exec libs/bats/bin/bats "$@"
+        ' bash "${BATS_FLAGS[@]}" "${files[@]}"
 }
 
 # ---------------------------------------------------------------------------
