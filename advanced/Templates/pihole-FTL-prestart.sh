@@ -1,8 +1,8 @@
 #!/usr/bin/env sh
 
 # Ensure that permissions are set so that pihole-FTL can edit all necessary files
-mkdir -p /var/log/pihole
-chown -R pihole:pihole /etc/pihole/ /var/log/pihole/
+mkdir -p /var/log/pihole /etc/pihole/hosts /var/lib/pihole
+chown -R pihole:pihole /etc/pihole/ /var/log/pihole/ /var/lib/pihole/
 
 # setpriv changes the user without opening a PAM session. su's logind session
 # waits for remote-fs.target at boot, which can depend on this very DNS server,

@@ -1,6 +1,6 @@
 .timeout 30000
 
-ATTACH DATABASE '/etc/pihole/gravity.db' AS OLD;
+ATTACH DATABASE '/var/lib/pihole/gravity.db' AS OLD;
 
 BEGIN TRANSACTION;
 

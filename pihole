@@ -9,12 +9,12 @@
 # This file is copyright under the latest version of the EUPL.
 # Please see LICENSE file for your rights under this license.
 
-PI_HOLE_SCRIPT_DIR="/opt/pihole"
+PI_HOLE_SCRIPT_DIR="/usr/libexec/pihole"
 
 # PI_HOLE_BIN_DIR is not readonly here because in some functions (checkout),
 # they might get set again when the installer is sourced. This causes an
 # error due to modifying a readonly variable.
-PI_HOLE_BIN_DIR="/usr/local/bin"
+PI_HOLE_BIN_DIR="/usr/bin"
 
 readonly colfile="${PI_HOLE_SCRIPT_DIR}/COL_TABLE"
 # shellcheck source=./advanced/Scripts/COL_TABLE
@@ -29,7 +29,7 @@ readonly apifile="${PI_HOLE_SCRIPT_DIR}/api.sh"
 # shellcheck source=./advanced/Scripts/api.sh
 source "${apifile}"
 
-versionsfile="/etc/pihole/versions"
+versionsfile="/usr/share/pihole/versions"
 # Load version variables without executing file content as shell code.
 # loadVersionFile() only assigns known keys with validated values.
 loadVersionFile "${versionsfile}"
@@ -97,25 +97,6 @@ networkFlush() {
   exit 0
 }
 
-updatePiholeFunc() {
-  if [ -n "${DOCKER_VERSION}" ]; then
-    unsupportedFunc
-  else
-    shift
-    "${PI_HOLE_SCRIPT_DIR}"/update.sh "$@"
-    exit 0
-  fi
-}
-
-repairPiholeFunc() {
-  if [ -n "${DOCKER_VERSION}" ]; then
-    unsupportedFunc
-  else
-    /etc/.pihole/automated\ install/basic-install.sh --repair
-    exit 0;
-  fi
-}
-
 updateGravityFunc() {
   exec "${PI_HOLE_SCRIPT_DIR}"/gravity.sh "$@"
 }
@@ -129,16 +110,6 @@ queryFunc() {
 chronometerFunc() {
   echo "Chronometer is gone, use PADD (https://github.com/pi-hole/PADD)"
   exit 0
-}
-
-
-uninstallFunc() {
-  if [ -n "${DOCKER_VERSION}" ]; then
-    unsupportedFunc
-  else
-    "${PI_HOLE_SCRIPT_DIR}"/uninstall.sh
-    exit 0
-  fi
 }
 
 versionFunc() {
@@ -400,40 +371,6 @@ tailFunc() {
   exit 0
 }
 
-piholeCheckoutFunc() {
-  if [ -n "${DOCKER_VERSION}" ]; then
-    echo -e "${CROSS} Function not supported in Docker images"
-    echo "Please build a custom image following the steps at"
-    echo "https://github.com/pi-hole/docker-pi-hole?tab=readme-ov-file#building-the-image-locally"
-    exit 0
-  else
-    if [[ "$2" == "-h" ]] || [[ "$2" == "--help" ]]; then
-      echo "Switch Pi-hole subsystems to a different GitHub branch
-    Usage: ${COL_GREEN}pihole checkout${COL_NC} ${COL_YELLOW}shortcut${COL_NC}
-        or ${COL_GREEN}pihole checkout${COL_NC} ${COL_PURPLE}repo${COL_NC} ${COL_CYAN}branch${COL_NC}
-
-  Example: ${COL_GREEN}pihole checkout${COL_NC} ${COL_YELLOW}master${COL_NC}
-       or  ${COL_GREEN}pihole checkout${COL_NC} ${COL_PURPLE}ftl ${COL_CYAN}development${COL_NC}
-
-  Shortcuts:
-    ${COL_YELLOW}master${COL_NC}            Update all subsystems to the latest stable release
-    ${COL_YELLOW}dev${COL_NC}               Update all subsystems to the latest development release
-
-  Individual components:
-    ${COL_PURPLE}core${COL_NC} ${COL_CYAN}branch${COL_NC}       Change the branch of Pi-hole's core subsystem
-    ${COL_PURPLE}web${COL_NC} ${COL_CYAN}branch${COL_NC}        Change the branch of the web interface subsystem
-    ${COL_PURPLE}ftl${COL_NC} ${COL_CYAN}branch${COL_NC}        Change the branch of Pi-hole's FTL subsystem"
-
-      exit 0
-    fi
-
-    #shellcheck source=./advanced/Scripts/piholeCheckout.sh
-    source "${PI_HOLE_SCRIPT_DIR}"/piholeCheckout.sh
-    shift
-    checkout "$@"
-  fi
-}
-
 tricorderFunc() {
   local tricorder_token
   if [[ ! -p "/dev/stdin" ]]; then
@@ -455,14 +392,10 @@ tricorderFunc() {
   exit 0
 }
 
-updateCheckFunc() {
-  "${PI_HOLE_SCRIPT_DIR}"/updatecheck.sh "$@"
-  exit 0
-}
-
-unsupportedFunc(){
-  echo "Function not supported in Docker images"
-  exit 0
+packageManagedFunc() {
+  echo "This Pi-hole build is managed by RPM."
+  echo "Use dnf or rpm to update, repair, or remove it."
+  exit 1
 }
 
 helpFunc() {
@@ -484,7 +417,6 @@ Debugging Options:
                         Add '-c' or '--check-database' to include a Pi-hole database integrity check
                         Add '-a' to automatically upload the log to tricorder.pi-hole.net
   -f, flush           Flush the Pi-hole log
-  -r, repair          Repair Pi-hole subsystems
   -t, tail [arg]      View the live output of the Pi-hole log.
                       Add an optional argument to filter the log
                       (regular expressions are supported)
@@ -502,10 +434,7 @@ Options:
                         Add '-h' for more info on logging usage
   -q, query           Query the adlists for a specified domain
                         Add '-h' for more info on query usage
-  -up, updatePihole   Update Pi-hole subsystems
-                        Add '--check-only' to exit script before update is performed.
   -v, version         Show installed versions of Pi-hole, Web Interface & FTL
-  uninstall           Uninstall Pi-hole from your system
   status              Display the running status of Pi-hole subsystems
   enable              Enable Pi-hole subsystems
                         Add '-h' for more info on enable usage
@@ -513,8 +442,6 @@ Options:
                         Add '-h' for more info on disable usage
   reloaddns           Update the lists and flush the cache without restarting the DNS server
   reloadlists         Update the lists WITHOUT flushing the cache or restarting the DNS server
-  checkout            Switch Pi-hole subsystems to a different GitHub branch
-                        Add '-h' for more info on checkout usage
   networkflush        Flush information stored in Pi-hole's network tables
                         Add '--arp' to additionally flush the ARP table ";
   exit 0
@@ -543,19 +470,21 @@ case "${1}" in
   "disable"                       ) piholeEnable false "$2";;
   "api"                           ) shift; apiFunc "$@"; exit 0;;
 
+  # RPM-managed / forbidden functions → no sudo, just message
+  "-up" | "updatePihole"          ) packageManagedFunc;;
+  "-r"  | "repair"                ) packageManagedFunc;;
+  "uninstall"                     ) packageManagedFunc;;
+  "checkout"                      ) packageManagedFunc;;
+  "updatechecker"                 ) packageManagedFunc;;
+
   # we need to add all arguments that require sudo power to not trigger the * argument
   "-f" | "flush"                  ) need_root=true;;
-  "-up" | "updatePihole"          ) need_root=true;;
-  "-r"  | "repair"                ) need_root=true;;
   "-l" | "logging"                ) need_root=true;;
-  "uninstall"                     ) need_root=true;;
   "-d" | "debug"                  ) need_root=true;;
   "-g" | "updateGravity"          ) need_root=true;;
   "reloaddns"                     ) need_root=true;;
   "reloadlists"                   ) need_root=true;;
   "setpassword"                   ) need_root=true;;
-  "checkout"                      ) need_root=true;;
-  "updatechecker"                 ) need_root=true;;
   "networkflush"                  ) need_root=true;;
   "-t" | "tail"                   ) need_root=true;;
   *                               ) helpFunc;;
@@ -580,16 +509,11 @@ fi
 case "${1}" in
   "-d" | "debug"                  ) debugFunc "$@";;
   "-f" | "flush"                  ) flushFunc "$@";;
-  "-up" | "updatePihole"          ) updatePiholeFunc "$@";;
-  "-r"  | "repair"                ) repairPiholeFunc;;
   "-g" | "updateGravity"          ) updateGravityFunc "$@";;
   "-l" | "logging"                ) piholeLogging "$@";;
-  "uninstall"                     ) uninstallFunc;;
   "reloaddns"                     ) reloadDNS "reload";;
   "reloadlists"                   ) reloadDNS "reload-lists";;
   "setpassword"                   ) SetWebPassword "$@";;
-  "checkout"                      ) piholeCheckoutFunc "$@";;
-  "updatechecker"                 ) shift; updateCheckFunc "$@";;
   "networkflush"                  ) networkFlush "$@";;
   "-t" | "tail"                   ) tailFunc "$2";;
   *                               ) helpFunc;;

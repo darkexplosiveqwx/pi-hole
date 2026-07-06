@@ -21,7 +21,7 @@ set -o pipefail
 ######## GLOBAL VARS ########
 # These variables would normally be next to the other files
 # but we need them to be first in order to get the colors needed for the script output
-PIHOLE_SCRIPTS_DIRECTORY="/opt/pihole"
+PIHOLE_SCRIPTS_DIRECTORY="/usr/libexec/pihole"
 PIHOLE_COLTABLE_FILE="${PIHOLE_SCRIPTS_DIRECTORY}/COL_TABLE"
 
 # These provide the colors we need for making the log more readable
@@ -42,9 +42,9 @@ else
 fi
 
 # shellcheck source=./advanced/Scripts/utils.sh
-source /opt/pihole/utils.sh
+source /usr/libexec/pihole/utils.sh
 
-loadVersionFile /etc/pihole/versions
+loadVersionFile /usr/share/pihole/versions
 
 # Read the value of an FTL config key. The value is printed to stdout.
 get_ftl_conf_value() {
@@ -65,16 +65,14 @@ FORUMS_URL="${COL_CYAN}https://discourse.pi-hole.net${COL_NC}"
 
 # Directories required by Pi-hole
 # https://discourse.pi-hole.net/t/what-files-does-pi-hole-use/1684
-CORE_GIT_DIRECTORY="/etc/.pihole"
 CRON_D_DIRECTORY="/etc/cron.d"
 DNSMASQ_D_DIRECTORY="/etc/dnsmasq.d"
 PIHOLE_DIRECTORY="/etc/pihole"
-PIHOLE_SCRIPTS_DIRECTORY="/opt/pihole"
-BIN_DIRECTORY="/usr/local/bin"
+PIHOLE_SCRIPTS_DIRECTORY="/usr/libexec/pihole"
+BIN_DIRECTORY="/usr/bin"
 LOG_DIRECTORY="/var/log/pihole"
 HTML_DIRECTORY="$(get_ftl_conf_value "webserver.paths.webroot")"
 WEBHOME_PATH="$(get_ftl_conf_value "webserver.paths.webhome")"
-WEB_GIT_DIRECTORY="${HTML_DIRECTORY}${WEBHOME_PATH}"
 SHM_DIRECTORY="/dev/shm"
 ETC="/etc"
 ETC_LOGROTATE_DIRECTORY="${ETC}/logrotate.d"
@@ -184,84 +182,38 @@ echo_current_diagnostic() {
     log_write "\\n${COL_PURPLE}*** [ DIAGNOSING ]:${COL_NC} ${1}"
 }
 
-compare_local_version_to_git_version() {
-    # The git directory to check
-    local git_dir="${1}"
-    # The named component of the project (Core or Web)
-    local pihole_component="${2}"
-
-    # Display what we are checking
-    echo_current_diagnostic "${pihole_component} version"
-    # Store the error message in a variable in case we want to change and/or reuse it
-    local error_msg="git status failed"
-    # If the pihole git directory exists,
-    if [[ -d "${git_dir}" ]]; then
-        # move into it
-        cd "${git_dir}" || \
-        # If not, show an error
-        log_write "${COL_RED}Could not cd into ${git_dir}$COL_NC"
-        if git status &> /dev/null; then
-            # The current version the user is on
-            local local_version
-            local_version=$(git describe --tags --abbrev=0 2> /dev/null);
-            # What branch they are on
-            local local_branch
-            local_branch=$(git rev-parse --abbrev-ref HEAD);
-            # The commit they are on
-            local local_commit
-            local_commit=$(git describe --long --dirty --tags --always)
-            # Status of the repo
-            local local_status
-            local_status=$(git status -s)
-            # echo this information out to the user in a nice format
-            if [ "${local_version}" ]; then
-              log_write "${TICK} Version: ${local_version}"
-            elif [ -n "${DOCKER_VERSION}" ]; then
-              log_write "${TICK} Version: Pi-hole Docker Container ${COL_BOLD}${DOCKER_VERSION}${COL_NC}"
-            else
-              log_write "${CROSS} Version: not detected"
-            fi
-
-            # Print the repo upstreams
-            remotes=$(git remote -v)
-            log_write "${INFO} Remotes: ${remotes//$'\n'/'\n             '}"
-
-            # If the repo is on the master branch, they are on the stable codebase
-            if [[ "${local_branch}" == "master" ]]; then
-                # so the color of the text is green
-                log_write "${INFO} Branch: ${COL_GREEN}${local_branch}${COL_NC}"
-            # If it is any other branch, they are in a development branch
-            else
-                # So show that in yellow, signifying it's something to take a look at, but not a critical error
-                log_write "${INFO} Branch: ${COL_YELLOW}${local_branch:-Detached}${COL_NC}"
-            fi
-            # echo the current commit
-            log_write "${INFO} Commit: ${local_commit}"
-            # if `local_status` is non-null, then the repo is not clean, display details here
-            if [[ ${local_status} ]]; then
-              # Replace new lines in the status with 12 spaces to make the output cleaner
-              log_write "${INFO} Status: ${local_status//$'\n'/'\n            '}"
-              local local_diff
-              local_diff=$(git diff)
-              if [[ ${local_diff} ]]; then
-                log_write "${INFO} Diff: ${local_diff//$'\n'/'\n          '}"
-              fi
-            fi
-        # If git status failed,
-        else
-            # Return an error message
-            log_write "${error_msg}"
-            # and exit with a non zero code
-            return 1
-        fi
+check_core_version() {
+    echo_current_diagnostic "Core version"
+    log_write "${TICK} Version: ${CORE_VERSION}"
+    # If they use the master branch, they are on the stable codebase
+    if [[ "${CORE_BRANCH}" == "master" ]]; then
+        # so the color of the text is green
+        log_write "${INFO} Branch: ${COL_GREEN}${CORE_BRANCH}${COL_NC}"
+        # If it is any other branch, they are in a development branch
     else
-        # Return an error message
-        log_write "${COL_RED}Directory ${git_dir} doesn't exist${COL_NC}"
-        # and exit with a non zero code
-        return 1
+        # So show that in yellow, signifying it's something to take a look at, but not a critical error
+        log_write "${INFO} Branch: ${COL_YELLOW}${CORE_BRANCH}${COL_NC}"
     fi
-}
 
+    # echo the current commit
+    log_write "${INFO} Commit: ${CORE_HASH}"
+}
+check_web_version() {
+    echo_current_diagnostic "Web version"
+    log_write "${TICK} Version: ${WEB_VERSION}"
+    # If they use the master branch, they are on the stable codebase
+    if [[ "${WEB_BRANCH}" == "master" ]]; then
+        # so the color of the text is green
+        log_write "${INFO} Branch: ${COL_GREEN}${WEB_BRANCH}${COL_NC}"
+        # If it is any other branch, they are in a development branch
+    else
+        # So show that in yellow, signifying it's something to take a look at, but not a critical error
+        log_write "${INFO} Branch: ${COL_YELLOW}${WEB_BRANCH}${COL_NC}"
+    fi
+
+    # echo the current commit
+    log_write "${INFO} Commit: ${WEB_HASH}"
+}
 check_ftl_version() {
     local FTL_VERSION FTL_COMMIT FTL_BRANCH
     echo_current_diagnostic "FTL version"
@@ -290,9 +242,9 @@ check_ftl_version() {
 # Checks the core version of the Pi-hole codebase
 check_component_versions() {
     # Check the Core version, branch, and commit
-    compare_local_version_to_git_version "${CORE_GIT_DIRECTORY}" "Core"
+    check_core_version
     # Check the Web version, branch, and commit
-    compare_local_version_to_git_version "${WEB_GIT_DIRECTORY}" "Web"
+    check_web_version
     # Check the FTL version
     check_ftl_version
 }
@@ -305,9 +257,6 @@ diagnose_operating_system() {
 
     # Display the current test that is running
     echo_current_diagnostic "Operating system"
-
-    # If DOCKER_VERSION is set (Sourced from /etc/pihole/versions at start of script), include this information in the debug output
-    [ -n "${DOCKER_VERSION}" ] && log_write "${INFO} Pi-hole Docker Container: ${DOCKER_VERSION}"
 
     # If there is a /etc/*release file, it's probably a supported operating system, so we can
     if ls /etc/*release 1> /dev/null 2>&1; then
@@ -403,25 +352,13 @@ run_and_print_command() {
 }
 
 hardware_check() {
-    # Note: the checks are skipped if Pi-hole is running in a docker container
-
-    local skip_msg="${INFO} Not enough permissions inside Docker container ${COL_YELLOW}(skipped)${COL_NC}"
-
     echo_current_diagnostic "System hardware configuration"
-    if [ -n "${DOCKER_VERSION}" ]; then
-        log_write "${skip_msg}"
-    else
-        # Store the output of the command in a variable
-        run_and_print_command "lshw -short"
-    fi
+    # Store the output of the command in a variable
+    run_and_print_command "lshw -short"
 
     echo_current_diagnostic "Processor details"
-    if [ -n "${DOCKER_VERSION}" ]; then
-        log_write "${skip_msg}"
-    else
-        # Store the output of the command in a variable
-        run_and_print_command "lscpu"
-    fi
+    # Store the output of the command in a variable
+    run_and_print_command "lscpu"
 }
 
 disk_usage() {
@@ -622,9 +559,7 @@ check_networking() {
     echo_current_diagnostic "Networking"
     ping_gateway "4"
     ping_gateway "6"
-    # Skip the following check if installed in docker container. Unpriv'ed containers do not have access to the information required
-    # to resolve the service name listening - and the container should not start if there was a port conflict anyway
-    [ -z "${DOCKER_VERSION}" ] && check_required_ports
+    check_required_ports
 }
 
 dig_at() {
@@ -761,24 +696,15 @@ process_status(){
         else
             # Otherwise, use the service command and mock the output of `systemctl is-active`
 
-            # If it is a docker container, there is no systemctl or service. Do nothing.
-            if [ -n "${DOCKER_VERSION}" ]; then
-                :
+            if service "${i}" status | grep -q -E 'is\srunning|started'; then
+                status_of_process="active"
             else
-            # non-Docker system
-                if service "${i}" status | grep -q -E 'is\srunning|started'; then
-                    status_of_process="active"
-                else
-                    status_of_process="inactive"
-                fi
+                status_of_process="inactive"
             fi
         fi
 
         # and print it out to the user
-        if [ -n "${DOCKER_VERSION}" ]; then
-            # If it's a Docker container, the test was skipped
-            log_write "${INFO} systemctl/service not installed inside docker container ${COL_YELLOW}(skipped)${COL_NC}"
-        elif [[ "${status_of_process}" == "active" ]]; then
+        if [[ "${status_of_process}" == "active" ]]; then
             # If it's active, show it in green
             log_write "${TICK} ${COL_GREEN}${i}${COL_NC} daemon is ${COL_GREEN}${status_of_process}${COL_NC}"
         else
@@ -795,8 +721,6 @@ ftl_full_status(){
     if command -v systemctl &> /dev/null; then
       FTL_status=$(systemctl status --full --no-pager pihole-FTL.service)
       log_write "   ${FTL_status}"
-    elif [ -n "${DOCKER_VERSION}" ]; then
-      log_write "${INFO} systemctl/service not installed inside docker container ${COL_YELLOW}(skipped)${COL_NC}"
     else
       log_write "${INFO} systemctl:  command not found"
     fi
