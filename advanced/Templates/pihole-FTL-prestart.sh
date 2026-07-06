@@ -1,8 +1,8 @@
 #!/usr/bin/env sh
 
 # Ensure that permissions are set so that pihole-FTL can edit all necessary files
-mkdir -p /var/log/pihole
-chown -R pihole:pihole /etc/pihole/ /var/log/pihole/
+mkdir -p /var/log/pihole /etc/pihole/hosts /var/lib/pihole
+chown -R pihole:pihole /etc/pihole/ /var/log/pihole/ /var/lib/pihole/
 
 # Set permissions on everything below /etc/pihole and /var/log/pihole:
 #   directories:           rwxr-xr-x (so pihole can access subdirs)

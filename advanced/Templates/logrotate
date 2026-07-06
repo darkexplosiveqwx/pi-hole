@@ -9,7 +9,7 @@
     nomail
     nodateext
     postrotate
-        . /opt/pihole/utils.sh; pid="$(getFTLPID)"; [ "${pid}" -gt 0 ] && kill -USR2 "${pid}" 2>/dev/null || true
+        . /usr/libexec/pihole/utils.sh; pid="$(getFTLPID)"; [ "${pid}" -gt 0 ] && kill -USR2 "${pid}" 2>/dev/null || true
     endscript
 }
 

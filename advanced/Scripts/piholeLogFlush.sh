@@ -8,11 +8,11 @@
 # This file is copyright under the latest version of the EUPL.
 # Please see LICENSE file for your rights under this license.
 
-colfile="/opt/pihole/COL_TABLE"
+colfile="/usr/libexec/pihole/COL_TABLE"
 # shellcheck source="./advanced/Scripts/COL_TABLE"
 source ${colfile}
 
-PI_HOLE_SCRIPT_DIR="/opt/pihole"
+PI_HOLE_SCRIPT_DIR="/usr/libexec/pihole"
 utilsfile="${PI_HOLE_SCRIPT_DIR}/utils.sh"
 # shellcheck source="./advanced/Scripts/utils.sh"
 source "${utilsfile}"

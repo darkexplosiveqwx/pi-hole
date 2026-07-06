@@ -23,12 +23,12 @@ User=pihole
 AmbientCapabilities=CAP_NET_BIND_SERVICE CAP_NET_RAW CAP_NET_ADMIN CAP_SYS_NICE CAP_CHOWN CAP_SYS_TIME
 
 # Run prestart with elevated permissions
-ExecStartPre=+/opt/pihole/pihole-FTL-prestart.sh
+ExecStartPre=+/usr/libexec/pihole/pihole-FTL-prestart.sh
 ExecStart=/usr/bin/pihole-FTL -f
 Restart=on-failure
 RestartSec=5s
 ExecReload=/bin/kill -HUP $MAINPID
-ExecStopPost=+/opt/pihole/pihole-FTL-poststop.sh
+ExecStopPost=+/usr/libexec/pihole/pihole-FTL-poststop.sh
 
 # Use graceful shutdown with a reasonable timeout
 TimeoutStopSec=60s
@@ -39,10 +39,6 @@ ProtectSystem=full
 # This merely retains r/w access rights, it does not add any new.
 # Must still be writable on the host!
 ReadWriteDirectories=/etc/pihole
-# ProtectSystem=full does not cover /opt, where the root-run prestart script
-# and the helper scripts live. Keep it read-only for the service so they cannot
-# be tampered with from within it. FTL only ever reads and executes from here.
-ReadOnlyPaths=/opt/pihole
 
 [Install]
 WantedBy=multi-user.target
