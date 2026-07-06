@@ -1,8 +1,8 @@
 #!/usr/bin/env sh
 
 # Ensure that permissions are set so that pihole-FTL can edit all necessary files
-mkdir -p /var/log/pihole
-chown -R pihole:pihole /etc/pihole/ /var/log/pihole/
+mkdir -p /var/log/pihole /etc/pihole/hosts /var/lib/pihole
+chown -R pihole:pihole /etc/pihole/ /var/log/pihole/ /var/lib/pihole/
 
 # allow pihole to access subdirs in /etc/pihole (sets execution bit on dirs)
 find /etc/pihole/ /var/log/pihole/ -type d -exec chmod 0755 {} +
@@ -19,4 +19,4 @@ chmod 0644 /etc/pihole/versions
 # Touch files to ensure they exist (create if non-existing, preserve if existing)
 # Hardcoded PID path — see GHSA-6w8x-p785-6pm4
 [ -f /run/pihole-FTL.pid ] || install -D -m 644 -o pihole -g pihole /dev/null /run/pihole-FTL.pid
-[ -f /etc/pihole/dhcp.leases ] || install -m 644 -o pihole -g pihole /dev/null /etc/pihole/dhcp.leases
+[ -f /var/lib/pihole/dhcp.leases ] || install -D -m 644 -o pihole -g pihole /dev/null /var/lib/pihole/dhcp.leases

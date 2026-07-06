@@ -12,7 +12,7 @@
 
 export LC_ALL=C
 
-PI_HOLE_SCRIPT_DIR="/opt/pihole"
+PI_HOLE_SCRIPT_DIR="/usr/libexec/pihole"
 # Source utils.sh for GetFTLConfigValue
 utilsfile="${PI_HOLE_SCRIPT_DIR}/utils.sh"
 # shellcheck source=./advanced/Scripts/utils.sh
@@ -22,18 +22,18 @@ coltable="${PI_HOLE_SCRIPT_DIR}/COL_TABLE"
 # shellcheck source=./advanced/Scripts/COL_TABLE
 . "${coltable}"
 # shellcheck source=./advanced/Scripts/database_migration/gravity-db.sh
-. "/etc/.pihole/advanced/Scripts/database_migration/gravity-db.sh"
+. "/usr/share/pihole/database_migration/gravity-db.sh"
 
 basename="pihole"
-PIHOLE_COMMAND="/usr/local/bin/${basename}"
+PIHOLE_COMMAND="/usr/bin/${basename}"
 
 piholeDir="/etc/${basename}"
 
-piholeGitDir="/etc/.pihole"
+piholeDataDir="/usr/share/pihole"
 GRAVITYDB=$(getFTLConfigValue files.gravity)
 GRAVITY_TMPDIR=$(getFTLConfigValue files.gravity_tmp)
-gravityDBschema="${piholeGitDir}/advanced/Templates/gravity.db.sql"
-gravityDBcopy="${piholeGitDir}/advanced/Templates/gravity_copy.sql"
+gravityDBschema="${piholeDataDir}/gravity.db.sql"
+gravityDBcopy="${piholeDataDir}/gravity_copy.sql"
 
 domainsExtension="domains"
 curl_connect_timeout=10
@@ -48,7 +48,7 @@ fi
 # Set this only after sourcing pihole-FTL.conf as the gravity database path may
 # have changed
 gravityDBfile="${GRAVITYDB}"
-gravityDBfile_default="${piholeDir}/gravity.db"
+gravityDBfile_default="/usr/share/pihole/gravity.db"
 gravityTEMPfile="${GRAVITYDB}_temp"
 gravityDIR="$(dirname -- "${gravityDBfile}")"
 gravityOLDfile="${gravityDIR}/gravity_old.db"

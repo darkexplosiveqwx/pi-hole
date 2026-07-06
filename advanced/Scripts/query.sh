@@ -10,13 +10,13 @@
 # Please see LICENSE file for your rights under this license.
 
 # Globals
-PI_HOLE_INSTALL_DIR="/opt/pihole"
+PI_HOLE_INSTALL_DIR="/usr/libexec/pihole"
 max_results="20"
 partial="false"
 domain=""
 
 # Source color table
-colfile="/opt/pihole/COL_TABLE"
+colfile="/usr/libexec/pihole/COL_TABLE"
 # shellcheck source="./advanced/Scripts/COL_TABLE"
 . "${colfile}"
 
