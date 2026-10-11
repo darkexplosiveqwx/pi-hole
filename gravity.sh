@@ -37,9 +37,6 @@ PIHOLE_COMMAND="/usr/local/bin/${basename}"
 
 piholeDir="/etc/${basename}"
 
-# Gravity aux files directory
-listsCacheDir="${piholeDir}/listsCache"
-
 piholeGitDir="/etc/.pihole"
 GRAVITYDB=$(getFTLConfigValue files.gravity)
 GRAVITY_TMPDIR=$(getFTLConfigValue files.gravity_tmp)
