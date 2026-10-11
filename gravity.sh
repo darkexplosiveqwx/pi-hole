@@ -29,9 +29,6 @@ PIHOLE_COMMAND="/usr/local/bin/${basename}"
 
 piholeDir="/etc/${basename}"
 
-# Gravity aux files directory
-listsCacheDir="${piholeDir}/listsCache"
-
 piholeGitDir="/etc/.pihole"
 GRAVITYDB=$(getFTLConfigValue files.gravity)
 GRAVITY_TMPDIR=$(getFTLConfigValue files.gravity_tmp)
@@ -57,6 +54,9 @@ gravityDIR="$(dirname -- "${gravityDBfile}")"
 gravityOLDfile="${gravityDIR}/gravity_old.db"
 gravityBCKdir="${gravityDIR}/gravity_backups"
 gravityBCKfile="${gravityBCKdir}/gravity.db"
+
+# Gravity aux files directory
+listsCacheDir="${gravityDIR}/listsCache"
 
 fix_owner_permissions() {
   # Fix ownership and permissions for the specified file
