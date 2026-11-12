@@ -1,0 +1,12 @@
+# Pi-hole: Grab remote and local version every 24 hours
+[Unit]
+Description=Daily Pi-hole update check
+
+[Timer]
+OnBootSec=30
+OnCalendar=*-*-* 12:00:00
+RandomizedDelaySec=25200
+Persistent=true
+
+[Install]
+WantedBy=timers.target

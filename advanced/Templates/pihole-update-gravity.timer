@@ -1,0 +1,12 @@
+# Pi-hole: Update the ad sources once a week on Sunday at a random time in the
+#          early morning. Download any updates from the adlists
+[Unit]
+Description=Weekly Pi-hole gravity update
+
+[Timer]
+OnCalendar=Sun *-*-* 03:00:00
+RandomizedDelaySec=7200
+Persistent=true
+
+[Install]
+WantedBy=timers.target

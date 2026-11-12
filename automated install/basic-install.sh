@@ -114,7 +114,7 @@ c=70
 
 # Version of Pi-hole's meta package on APT based systems
 # Must be incremented whenever dependencies in PIHOLE_META_PACKAGE_CONTROL_APT change
-PIHOLE_META_VERSION_APT=0.8
+PIHOLE_META_VERSION_APT=0.9
 
 # Content of Pi-hole's meta package control file on APT based systems
 PIHOLE_META_PACKAGE_CONTROL_APT=$(
@@ -124,7 +124,7 @@ Version: ${PIHOLE_META_VERSION_APT}
 Maintainer: Pi-hole team <adblock@pi-hole.net>
 Architecture: all
 Description: Pi-hole dependency meta package
-Depends: awk,bash-completion,binutils,ca-certificates,cron|cron-daemon,curl,dialog,bind9-dnsutils|dnsutils,dns-root-data,git,grep,iproute2,iputils-ping,jq,libcap2,libcap2-bin,logrotate,lshw,procps,psmisc,util-linux,unzip
+Depends: awk,bash-completion,binutils,ca-certificates,cron|cron-daemon|systemd,curl,dialog,bind9-dnsutils|dnsutils,dns-root-data,git,grep,iproute2,iputils-ping,jq,libcap2,libcap2-bin,logrotate,lshw,procps,psmisc,util-linux,unzip
 Section: contrib/metapackages
 Priority: optional
 EOM
@@ -134,12 +134,12 @@ EOM
 PIHOLE_META_PACKAGE_CONTROL_RPM=$(
     cat <<EOM
 Name: pihole-meta
-Version: 0.6
+Version: 0.7
 Release: 1
 License: EUPL
 BuildArch: noarch
 Summary: Pi-hole dependency meta package
-Requires: bash-completion,bind-utils,binutils,ca-certificates,chkconfig,cronie,curl,dialog,diffutils,findutils,gawk,git,grep,iproute,jq,libcap,logrotate,lshw,procps-ng,psmisc,util-linux,unzip
+Requires: bash-completion,bind-utils,binutils,ca-certificates,chkconfig,curl,dialog,diffutils,findutils,gawk,git,grep,iproute,jq,libcap,logrotate,lshw,procps-ng,psmisc,util-linux,unzip
 %description
 Pi-hole dependency meta package
 %prep
@@ -147,6 +147,9 @@ Pi-hole dependency meta package
 %files
 %install
 %changelog
+* Thu Nov 12 2026 Pi-hole Team - 0.7
+- Remove cronie from the list of dependencies to use systemd timers instead
+
 * Mon Nov 02 2026 Pi-hole Team - 0.6
 - Replace sudo with util-linux in the list of dependencies
 
@@ -273,6 +276,14 @@ is_command() {
     local check_command="$1"
 
     command -v "${check_command}" >/dev/null 2>&1
+}
+
+is_pid1() {
+    # Checks to see if the given command runs as PID 1 (i.e. is the init system).
+    # The function returns 0 (success) if it does, and 1 if it doesn't.
+    local check_command="$1"
+
+    ps --pid 1 --format comm= 2>/dev/null | grep -q "${check_command}"
 }
 
 # /etc/pihole is owned by the pihole user, who can replace anything in it with a
@@ -1329,13 +1340,25 @@ installConfigs() {
     fi
 
     # Install pihole-FTL systemd or init.d service, based on whether systemd is the init system or not
-    if ps -p 1 -o comm= | grep -q systemd; then
+    if is_pid1 systemd; then
         install -T -m 0644 "${PI_HOLE_LOCAL_REPO}/advanced/Templates/pihole-FTL.systemd" '/etc/systemd/system/pihole-FTL.service'
 
         # Remove init.d service if present
         if [[ -e '/etc/init.d/pihole-FTL' ]]; then
             rm '/etc/init.d/pihole-FTL'
             update-rc.d pihole-FTL remove
+        fi
+
+        # Install systemd timers for Pi-hole's periodic tasks
+        install -T -m 0644 "${PI_HOLE_LOCAL_REPO}/advanced/Templates/pihole-update-gravity.service" '/etc/systemd/system/pihole-update-gravity.service'
+        install -T -m 0644 "${PI_HOLE_LOCAL_REPO}/advanced/Templates/pihole-update-gravity.timer" '/etc/systemd/system/pihole-update-gravity.timer'
+        install -T -m 0644 "${PI_HOLE_LOCAL_REPO}/advanced/Templates/pihole-updatechecker.service" '/etc/systemd/system/pihole-updatechecker.service'
+        install -T -m 0644 "${PI_HOLE_LOCAL_REPO}/advanced/Templates/pihole-updatechecker.timer" '/etc/systemd/system/pihole-updatechecker.timer'
+
+        # Remove a legacy cron job if it is still present, so the two schedulers
+        # do not both run the same tasks.
+        if [[ -e '/etc/cron.d/pihole' ]]; then
+            rm -f '/etc/cron.d/pihole'
         fi
 
         # Load final service
@@ -1827,8 +1850,10 @@ installPihole() {
         exit 1
     fi
 
-    # Install the cron file
-    installCron
+    # Install the cron file only on systems without systemd as init
+    if ! is_pid1 systemd; then
+        installCron
+    fi
 
     # Install the logrotate file
     installLogrotate || true
@@ -2623,6 +2648,11 @@ main() {
     enable_service pihole-FTL
 
     restart_service pihole-FTL
+
+    if is_pid1 systemd; then
+        enable_service pihole-update-gravity.timer
+        enable_service pihole-updatechecker.timer
+    fi
 
     if [[ "${fresh_install}" == true ]]; then
         # apply settings to pihole.toml

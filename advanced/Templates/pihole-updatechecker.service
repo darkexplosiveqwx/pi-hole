@@ -1,0 +1,20 @@
+# Pi-hole: Grab remote and local version every 24 hours
+[Unit]
+Description=Pi-hole updatechecker
+After=network-online.target nss-lookup.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=pihole
+Group=pihole
+ExecStart=/usr/bin/bash -c 'PATH="$PATH:/usr/sbin:/usr/local/bin/" pihole updatechecker'
+
+ProtectSystem=full
+ReadWriteDirectories=/etc/pihole
+ProtectHome=read-only
+PrivateTmp=yes
+NoNewPrivileges=yes
+RestrictSUIDSGID=yes
+UMask=0077
+LockPersonality=yes

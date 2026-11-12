@@ -1,0 +1,22 @@
+# Pi-hole: Update the ad sources once a week on Sunday at a random time in the
+#          early morning. Download any updates from the adlists
+#          Squash output to log and journal.
+[Unit]
+Description=Update Pi-hole Gravity
+After=network-online.target nss-lookup.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=pihole
+Group=pihole
+ExecStart=/usr/bin/bash -c 'PATH="$PATH:/usr/sbin:/usr/local/bin/" pihole updateGravity | tee /var/log/pihole/pihole_updateGravity.log'
+
+ProtectSystem=full
+ReadWriteDirectories=/etc/pihole /var/log/pihole
+ProtectHome=read-only
+PrivateTmp=yes
+NoNewPrivileges=yes
+RestrictSUIDSGID=yes
+UMask=0077
+LockPersonality=yes
